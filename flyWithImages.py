@@ -13,6 +13,9 @@ import time
 # set this to true if you want to fly for the demo
 testFlying = False
 
+# the folder you would like to save images to...
+folder = "images/";
+
 class UserVision:
     def __init__(self, vision):
         self.index = 0
@@ -25,7 +28,8 @@ class UserVision:
 
         if (img is not None):
             filename = "test_image_%06d.png" % self.index
-            cv2.imwrite(filename, img)
+            #cv2.imwrite(filename, img)
+            cv2.imwrite(folder + filename, img)
             self.index +=1
             #print(self.index)
 
@@ -76,7 +80,7 @@ if (success):
         # rotate and take pictures
         for x in range(8):
             mambo.turn_degrees(45)
-            mambo.smart_sleep(1)
+            mambo.smart_sleep(.1)
 
         mambo.smart_sleep(1)
 
