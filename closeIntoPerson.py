@@ -9,6 +9,9 @@ import os   # so we can use command line from python file
 import subprocess   # so we can use command line in different directory than file
 import csv
 
+# README: this script will close into a single person, using object detection of persons body
+
+
 def get_parent_dir(n=1):
     """returns the n-th parent dicrectory of the current
     working directory"""
@@ -344,7 +347,6 @@ if __name__ == "__main__":
     success = mambo.connect(num_retries=3)
     print("connected: %s" % success)
 
-
     # runs detector on image / images in test directory : OBSOLETE FUNCTION AS OF NOW
     def runDetector():
         # runs detector on images
@@ -429,27 +431,6 @@ if __name__ == "__main__":
 
     # centers drone to person depth, depending on size of person box
     def center_drone(x_min, x_max, y_min, y_max, area, img_width, img_height):
-        # DEPTH CENTERING
-        target_area = 14000  # pixel x pixel
-        total_area = img_width * img_height
-
-        # if normal area is above 0, it means drone is too close
-        # if normal area is below 0, it means drone is too far
-        normal_area = area - target_area  # value between -0.5 and 0.5
-
-        print("normal area" + str(normal_area))
-        BUFFER = 2000  # area within drone is safe
-        # vertical centering
-        if normal_area > BUFFER:
-            mambo.fly_direct(roll=0, pitch=-50, yaw=0, vertical_movement=0, duration=.3)
-            print("Adjusting drone, moving farther")
-            mambo.smart_sleep(1)
-        elif normal_area < -BUFFER:
-            mambo.fly_direct(roll=0, pitch=50, yaw=0, vertical_movement=0, duration=.3)
-            print("Adjusting drone, moving closer")
-            mambo.smart_sleep(1)
-        else:
-            print("Did not need to adjust drone depth")
 
         # PLANE CENTERING
         # normal value between -0.5 and 0.5, 0 is when drone centered, positive is when face is to right of drone
@@ -477,16 +458,39 @@ if __name__ == "__main__":
 
         # horizontal centering
         if x_center > .1:
-            mambo.fly_direct(roll=50, pitch=0, yaw=0, vertical_movement=0, duration=.2)
+            #mambo.fly_direct(roll=50, pitch=0, yaw=0, vertical_movement=0, duration=.2)
+            mambo.turn_degrees(20)
             print("Adjusting drone, moving right")
-            mambo.smart_sleep(1)
+            mambo.smart_sleep(.5)
         elif x_center < -.1:
-            mambo.fly_direct(roll=-50, pitch=0, yaw=0, vertical_movement=-0, duration=.2)
+            #mambo.fly_direct(roll=-50, pitch=0, yaw=0, vertical_movement=-0, duration=.2)
+            mambo.turn_degrees(-20)
             print("Adjusting drone, moving left")
-            mambo.smart_sleep(1)
+            mambo.smart_sleep(-.5)
         else:
             print("Did not need to adjust drone horizontally")
 
+        # DEPTH CENTERING
+        target_area = 14000  # pixel x pixel
+        total_area = img_width * img_height
+
+        # if normal area is above 0, it means drone is too close
+        # if normal area is below 0, it means drone is too far
+        normal_area = area - target_area  # value between -0.5 and 0.5
+
+        print("normal area" + str(normal_area))
+        BUFFER = 2000  # area within drone is safe
+
+        if normal_area > BUFFER:
+            mambo.fly_direct(roll=0, pitch=-50, yaw=0, vertical_movement=0, duration=.3)
+            print("Adjusting drone, moving farther")
+            mambo.smart_sleep(1)
+        elif normal_area < -BUFFER:
+            mambo.fly_direct(roll=0, pitch=50, yaw=0, vertical_movement=0, duration=.3)
+            print("Adjusting drone, moving closer")
+            mambo.smart_sleep(1)
+        else:
+            print("Did not need to adjust drone depth")
 
     if success:
         # get the state information
