@@ -458,12 +458,10 @@ if __name__ == "__main__":
 
         # horizontal centering
         if x_center > .1:
-            #mambo.fly_direct(roll=50, pitch=0, yaw=0, vertical_movement=0, duration=.2)
             mambo.turn_degrees(20)
             print("Adjusting drone, moving right")
             mambo.smart_sleep(.5)
         elif x_center < -.1:
-            #mambo.fly_direct(roll=-50, pitch=0, yaw=0, vertical_movement=-0, duration=.2)
             mambo.turn_degrees(-20)
             print("Adjusting drone, moving left")
             mambo.smart_sleep(-.5)
@@ -479,7 +477,7 @@ if __name__ == "__main__":
         normal_area = area - target_area  # value between -0.5 and 0.5
 
         print("normal area" + str(normal_area))
-        BUFFER = 2000  # area within drone is safe
+        BUFFER = 5000  # area within drone is safe
 
         if normal_area > BUFFER:
             mambo.fly_direct(roll=0, pitch=-50, yaw=0, vertical_movement=0, duration=.3)
