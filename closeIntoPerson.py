@@ -448,23 +448,31 @@ if __name__ == "__main__":
         if y_center > .1:
             mambo.fly_direct(roll=0, pitch=0, yaw=0, vertical_movement=10, duration=.2)
             print("Adjusting drone, moving upwards")
-            mambo.smart_sleep(1)
+            mambo.smart_sleep(.5)
         elif y_center < -.1:
-            mambo.fly_direct(roll=0, pitch=0, yaw=0, vertical_movement=-10, duration=.2)
+            mambo.fly_direct(roll=0, pitch=0, yaw=0, vertical_movement=-20, duration=.2)
             print("Adjusting drone, moving downwards")
-            mambo.smart_sleep(1)
+            mambo.smart_sleep(.5)
         else:
             print("Did not need to adjust drone vertically")
 
         # horizontal centering
         if x_center > .1:
-            mambo.turn_degrees(20)
-            print("Adjusting drone, moving right")
+            if x_center > .4:
+                mambo.turn_degrees(40)
+                print("Adjusting drone, rotating right macro")
+            else:
+                mambo.turn_degrees(20)
+                print("Adjusting drone, rotating right micro")
             mambo.smart_sleep(.5)
         elif x_center < -.1:
-            mambo.turn_degrees(-20)
-            print("Adjusting drone, moving left")
-            mambo.smart_sleep(-.5)
+            if x_center < -.4:
+                mambo.turn_degrees(-40)
+                print("Adjusting drone, moving left macro")
+            else:
+                mambo.turn_degrees(-20)
+                print("Adjusting drone, moving micro")
+            mambo.smart_sleep(.5)
         else:
             print("Did not need to adjust drone horizontally")
 
@@ -482,11 +490,11 @@ if __name__ == "__main__":
         if normal_area > BUFFER:
             mambo.fly_direct(roll=0, pitch=-50, yaw=0, vertical_movement=0, duration=.3)
             print("Adjusting drone, moving farther")
-            mambo.smart_sleep(1)
+            mambo.smart_sleep(.5)
         elif normal_area < -BUFFER:
             mambo.fly_direct(roll=0, pitch=50, yaw=0, vertical_movement=0, duration=.3)
             print("Adjusting drone, moving closer")
-            mambo.smart_sleep(1)
+            mambo.smart_sleep(.5)
         else:
             print("Did not need to adjust drone depth")
 
