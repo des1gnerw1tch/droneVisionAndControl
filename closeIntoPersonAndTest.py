@@ -54,19 +54,20 @@ detection_results_file = os.path.join(detection_results_folder, "Detection_Resul
 
 model_folder = os.path.join(data_folder, "Model_Weights")
 
-# TODO: replace with Samantha's new weights
-model_weights = os.path.join(model_folder, "yolo.h5")
-model_classes = os.path.join(model_folder, "coco_classes.txt")
+#  TODO:  replace with Samantha's new weights
+model_weights = os.path.join(model_folder, "weightsPersonMask.h5")
+model_classes = os.path.join(model_folder, "classes_samantha.txt")
 
 anchors_path = os.path.join(src_path, "keras_yolo3", "model_data", "yolo_anchors.txt")
 
 # TODO: replace with real person and mask labels
-person_label = 0
-mask_label = 1
+person_label = 3
+mask_label = 0
 
 FLAGS = None
 
 
+# runs weights on images in image_folder, detection results saved to a csv in detction_results_folder
 def run_weights(_out_df):
     print("Started to run weights")
     if input_image_paths and not webcam_active:
@@ -91,7 +92,6 @@ def run_weights(_out_df):
             )
             y_size, x_size, _ = np.array(image).shape
             for single_prediction in prediction:
-                print("referenced out_df")
                 _out_df = _out_df.append(
                     pd.DataFrame(
                         [
@@ -351,10 +351,10 @@ if __name__ == "__main__":
     # holds bounding box of a single person
     class Box:
         def __init__(self, min_x, max_x, min_y, max_y):
-            self.min_x = min_x
-            self.max_x = max_x
-            self.min_y = min_y
-            self.max_y = max_y
+            self.min_x = float(min_x)
+            self.max_x = float(max_x)
+            self.min_y = float(min_y)
+            self.max_y = float(max_y)
 
         def get_min_x(self):
             return self.min_x
@@ -374,6 +374,16 @@ if __name__ == "__main__":
         def get_center_y(self):
             return (self.min_y + self.max_y) / 2
 
+    # checks if a mask is inside of a person
+    def mask_in_person(person, mask):
+        mask_center_x = (mask.get_min_x() + mask.get_max_x()) / 2
+        mask_center_y = (mask.get_min_y() + mask.get_max_y()) / 2
+        if (person.get_min_x() < mask_center_x < person.get_max_x()
+                and person.get_min_y() < mask_center_y < person.get_max_y()):
+            return True
+        else:
+            return False
+
     # moves last image captured on drone into test directory (where weights will be run on the image)
     def last_image_to_test_dir():
         _mamboVision = DroneVision(mambo, is_bebop=False, buffer_size=30)
@@ -383,12 +393,11 @@ if __name__ == "__main__":
         cv2.imwrite(testPath + filename, img)
 
     # closes into a person to check if they have a mask on
-    # TODO: Write this function
     def close_into_person(target):
 
         # calculates euclidean distance between two boxes center
         def calculate_distance(box1, box2):
-            return pow(pow(box1.get_center_x() - box2.get_center_x(), 2) + pow(box1.get_center_y + box2.get_center_y(), 2), .5)
+            return pow(pow(box1.get_center_x() - box2.get_center_x(), 2) + pow(box1.get_center_y() + box2.get_center_y(), 2), .5)
 
         last_image_to_test_dir()  # put last drone image into testing directory
         run_weights(out_df)  # run updated target weights
@@ -404,11 +413,13 @@ if __name__ == "__main__":
         # open csv file, make reader to find closest person to target
         # CSV after use
         with open(resultsPath, newline='') as csvfile:
+            print("close_into_person(), trying to find closest person to focus")
             reader = csv.reader(csvfile, delimiter=',', quotechar='|')
             line_count = 0
-            closest_person = None  # biggest area of person so far
+            closest_person = None  # closest person to focus so far
             least_distance = None
 
+            # finds closest person to focus
             for row in reader:
                 line_count += 1
                 if line_count != 1:  # makes sure first row is skipped
@@ -416,40 +427,50 @@ if __name__ == "__main__":
                 else:
                     label = -1  # throwaway label, this is because csv reads first row which is headers
 
-                if label == 0:  # if object detected is a person
+                if label == person_label:  # if object detected is a person
+                    print("close_into_person(), detected a person")
                     x_min = float(row[2])
                     y_min = float(row[3])
                     x_max = float(row[4])
                     y_max = float(row[5])
                     detected_person = Box(x_min, x_max, y_min, y_max)
                     area = abs(x_max - x_min) * abs(y_max - y_min)
-                    if closest_person is None:  # if no person found yet, this person is biggest area
+                    if closest_person is None:  # if no person found yet, this person is the closest person to target
                         closest_person = detected_person  # TODO: beware, could be a reference problem
+                        least_distance = calculate_distance(target, detected_person)
                     elif calculate_distance(target, detected_person) < least_distance:  # if this person is closest to target
                         least_distance = calculate_distance(target, detected_person)
                         closest_person = detected_person
 
-                    # on last iteration, call our function to center drone
-                    if line_count == row_length and closest_person is not None:
+                # on last iteration, decide whether to move drone closer or drop focus
+                if line_count == row_length and closest_person is not None:
+                    print("close_into_person(), Found closest person to Focus, attempting to find mask on them now")
+                    found_mask = False
+                    line_count2 = 0
+                    for row2 in reader:  # go through csv again, line by line
+                        line_count2 += 1
+                        if line_count2 != 1:
+                            label2 = float(row2[6])
+                            if label2 == mask_label:  # if is mask label
+                                if mask_in_person(closest_person, Box(row2[2], row2[4], row2[3], row2[5])):
+                                    found_mask = True
+                    if found_mask:
+                        print("close_into_person(), Found a mask on Focus, returning None as new Focus")
+                        return None  # person of interest had mask on them
+                    else:
+                        print("close_into_person(), Did not find mask on Focus, attempting to center drone to Focus")
                         img_width = float(row[8])
                         img_height = float(row[9])
-                        print("Person detected, centering drone....")
-                        center_drone(closest_person, area, img_width, img_height)
-
-
+                        print("Person detected without mask, centering drone....")
+                        return center_drone(closest_person, area, img_width, img_height)
+                elif line_count == row_length and closest_person is None:
+                    print("close_into_person(), could not find Focus, returning None")
+                    return None
 
     # surveys a scene, returns a person who does not have mask inside of bounding box
     def find_test_person():
-        def mask_in_person(person, mask):
-            mask_center_x = (mask.get_min_x() + mask.get_max_x()) / 2
-            mask_center_y = (mask.get_min_y() + mask.get_max_y()) / 2
-            if (person.get_min_x() < mask_center_x < person.get_max_x()
-                    and person.get_min_y() < mask_center_y < person.get_max_y()):
-                return True
-            else:
-                return False
-
-        subject = None
+        subject = None  # a Box, the person we will test if has mask. If cannot tell if has mask, will return subject.
+        # if subject does have mask, will try to find next subject.
 
         # finds the length of lines in csv file
         with open(resultsPath, newline='') as csvfile:
@@ -473,26 +494,28 @@ if __name__ == "__main__":
 
                 # if found person, look through csv again and try to find a mask on that person
                 if label == person_label:  # if object detected is a person
+                    subject = Box(row[2], row[4], row[3], row[5])  # person subject
+                    print("find_test_person(), found a subject, checking if wearing mask")
                     found_mask = False
                     line_count2 = 0
                     for row2 in reader:  # go through csv again, line by line
                         line_count2 += 1
                         if line_count2 != 1:
                             label2 = float(row2[6])
-                            if label == mask_label:  # if is mask label
-                                subject = Box(row[2], row[4], row[3], row[5])  # person subject
+                            if label2 == mask_label:  # if is mask label
                                 if mask_in_person(subject, Box(row2[2], row2[4], row2[3], row2[5])):
                                     found_mask = True
-                    if found_mask:
+                    if found_mask:  # if there was a mask on this subject, keep going through first loop
+                        print("find_test_person(), Subject was wearing mask, looking for next subject")
                         pass
-                    else:
+                    else:  # if we have not found mask on this subject, return this subject to be focused on
+                        print("find_test_person(), Cannot find mask on Subject, returning Subject as focus")
                         return subject
 
-            return None  # person without mask not found
+            print("find_test_person(), Did not find any subjects not wearing a mask, returning None as focus")
+            return None  # first loop finished, person without mask not found
 
     # centers drone to person depth, depending on size of person box
-    # TODO: add functionality to drop focus when mask is found on person, add functionality where if close enough,
-    # TODO: and no mask/ incorrect mask, drone will print non / incorrect masked person found
     def center_drone(person, area, img_width, img_height):
 
         # PLANE CENTERING
@@ -507,34 +530,34 @@ if __name__ == "__main__":
         # vertical centering
         if y_center > .1:
             mambo.fly_direct(roll=0, pitch=0, yaw=0, vertical_movement=10, duration=.2)
-            print("Adjusting drone, moving upwards")
+            print("Adjusting drone to Focus, moving upwards")
             mambo.smart_sleep(.5)
         elif y_center < -.1:
             mambo.fly_direct(roll=0, pitch=0, yaw=0, vertical_movement=-20, duration=.2)
-            print("Adjusting drone, moving downwards")
+            print("Adjusting drone to Focus, moving downwards")
             mambo.smart_sleep(.5)
         else:
-            print("Did not need to adjust drone vertically")
+            print("Did not need to adjust drone vertically to Focus")
 
         # horizontal centering
         if x_center > .15:
             if x_center > .4:
                 mambo.turn_degrees(40)
-                print("Adjusting drone, rotating right macro")
+                print("Adjusting drone to Focus, rotating right macro")
             else:
                 mambo.turn_degrees(20)
-                print("Adjusting drone, rotating right micro")
+                print("Adjusting drone to Focus, rotating right micro")
             mambo.smart_sleep(.5)
         elif x_center < -.15:
             if x_center < -.4:
                 mambo.turn_degrees(-40)
-                print("Adjusting drone, rotating left macro")
+                print("Adjusting drone to Focus, rotating left macro")
             else:
                 mambo.turn_degrees(-20)
-                print("Adjusting drone, rotating micro")
+                print("Adjusting drone to Focus, rotating micro")
             mambo.smart_sleep(.5)
         else:
-            print("Did not need to adjust drone horizontally")
+            print("Did not need to adjust drone to Focus horizontally")
 
         # DEPTH CENTERING
         target_area = 14000  # pixel x pixel
@@ -549,14 +572,17 @@ if __name__ == "__main__":
 
         if normal_area > BUFFER:
             mambo.fly_direct(roll=0, pitch=-50, yaw=0, vertical_movement=0, duration=.3)
-            print("Adjusting drone, moving farther")
+            print("Adjusting drone to Focus, moving farther")
             mambo.smart_sleep(.5)
         elif normal_area < -BUFFER:
             mambo.fly_direct(roll=0, pitch=50, yaw=0, vertical_movement=0, duration=.3)
-            print("Adjusting drone, moving closer")
+            print("Adjusting drone to Focus, moving closer")
             mambo.smart_sleep(.5)
         else:
             print("Did not need to adjust drone depth")
+
+        # Return person it was following
+        return person
 
     # main program down here --
     if success:
@@ -595,15 +621,19 @@ if __name__ == "__main__":
 
             focus = None
 
+            print("Starting main control algorithm")
             # MAIN CONTROL ALGORITHM
             while True:
                 if focus is not None:  # found a target to focus on with no mask
-                    close_into_person(focus)
+                    print("Focus found, calling close_into_person()")
+                    focus = close_into_person(focus)
                 else:  # did not find a target to focus on
+                    print("Did not find a focus, running find_test_person()")
                     last_image_to_test_dir()
                     run_weights(out_df)
                     focus = find_test_person()
                     if focus is None:  # no interesting person is found, rotate and try again
+                        print("Did not find test person, rotating...");
                         mambo.turn_degrees(20)
 
             mambo.smart_sleep(5)
