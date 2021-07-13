@@ -499,12 +499,16 @@ if __name__ == "__main__":
                     found_mask = False
                     line_count2 = 0
                     for row2 in reader:  # go through csv again, line by line
+                        print("find_test_person(), going through second loop to find mask")
                         line_count2 += 1
                         if line_count2 != 1:
                             label2 = float(row2[6])
                             if label2 == mask_label:  # if is mask label
+                                print("find_test_person(), Found mask in scene")
                                 if mask_in_person(subject, Box(row2[2], row2[4], row2[3], row2[5])):
                                     found_mask = True
+                        print("find_test_person(), current search row CSV is " + str(line_count2))
+                        print("CSV length " + str(line_count))
                     if found_mask:  # if there was a mask on this subject, keep going through first loop
                         print("find_test_person(), Subject was wearing mask, looking for next subject")
                         pass
