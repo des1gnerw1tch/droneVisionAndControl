@@ -374,15 +374,45 @@ if __name__ == "__main__":
         def get_center_y(self):
             return (self.min_y + self.max_y) / 2
 
-    # checks if a mask is inside of a person
-    def mask_in_person(person, mask):
-        mask_center_x = (mask.get_min_x() + mask.get_max_x()) / 2
-        mask_center_y = (mask.get_min_y() + mask.get_max_y()) / 2
-        if (person.get_min_x() < mask_center_x < person.get_max_x()
-                and person.get_min_y() < mask_center_y < person.get_max_y()):
+    # checks if a single mask is inside of a person
+    def is_object_in_person(person, obj):
+        obj_center_x = (obj.get_min_x() + obj.get_max_x()) / 2
+        obj_center_y = (obj.get_min_y() + obj.get_max_y()) / 2
+        if (person.get_min_x() < obj_center_x < person.get_max_x()
+                and person.get_min_y() < obj_center_y < person.get_max_y()):
             return True
         else:
             return False
+
+    # checks a CSV file, sees if person (Box) specified has a mask inside of it
+    def is_person_wearing_mask(person):
+        row_length = 0  # how many rows CSV file contains
+
+        with open(resultsPath, newline='') as csvfile:  # checks how many rows CSV has
+            reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+            for row in reader:
+                row_length += 1
+
+        with open(resultsPath, newline='') as csvfile:  # loops across CSV to see if person is wearing mask
+            reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+            line_count = 0
+            for row in reader:
+                line_count += 1
+
+                if line_count != 1:  # makes sure first row is skipped
+                    label = float(row[6])
+                else:
+                    label = -1
+
+                if label == mask_label:  # if row in CSV is mask
+
+                    if is_object_in_person(person, Box(row[2], row[4], row[3], row[5])):
+                        print("is_person_wearing_mask(), Mask found on person, returning True")
+                        return True  # there is a mask inside this person box
+                    else:
+                        print("is_person_wearing_mask(), Mask not found on person, returning false")
+
+            return False  # if went through whole CSV and no mask inside person, return False
 
     # moves last image captured on drone into test directory (where weights will be run on the image)
     def last_image_to_test_dir():
@@ -445,15 +475,8 @@ if __name__ == "__main__":
                 # on last iteration, decide whether to move drone closer or drop focus
                 if line_count == row_length and closest_person is not None:
                     print("close_into_person(), Found closest person to Focus, attempting to find mask on them now")
-                    found_mask = False
-                    line_count2 = 0
-                    for row2 in reader:  # go through csv again, line by line
-                        line_count2 += 1
-                        if line_count2 != 1:
-                            label2 = float(row2[6])
-                            if label2 == mask_label:  # if is mask label
-                                if mask_in_person(closest_person, Box(row2[2], row2[4], row2[3], row2[5])):
-                                    found_mask = True
+                    found_mask = is_person_wearing_mask(closest_person)
+
                     if found_mask:
                         print("close_into_person(), Found a mask on Focus, returning None as new Focus")
                         return None  # person of interest had mask on them
@@ -496,19 +519,7 @@ if __name__ == "__main__":
                 if label == person_label:  # if object detected is a person
                     subject = Box(row[2], row[4], row[3], row[5])  # person subject
                     print("find_test_person(), found a subject, checking if wearing mask")
-                    found_mask = False
-                    line_count2 = 0
-                    for row2 in reader:  # go through csv again, line by line
-                        print("find_test_person(), going through second loop to find mask")
-                        line_count2 += 1
-                        if line_count2 != 1:
-                            label2 = float(row2[6])
-                            if label2 == mask_label:  # if is mask label
-                                print("find_test_person(), Found mask in scene")
-                                if mask_in_person(subject, Box(row2[2], row2[4], row2[3], row2[5])):
-                                    found_mask = True
-                        print("find_test_person(), current search row CSV is " + str(line_count2))
-                        print("CSV length " + str(line_count))
+                    found_mask = is_person_wearing_mask(subject)
                     if found_mask:  # if there was a mask on this subject, keep going through first loop
                         print("find_test_person(), Subject was wearing mask, looking for next subject")
                         pass
@@ -532,11 +543,11 @@ if __name__ == "__main__":
         print("y_center: " + str(y_center))
 
         # vertical centering
-        if y_center > .1:
+        if y_center > -.1:
             mambo.fly_direct(roll=0, pitch=0, yaw=0, vertical_movement=10, duration=.2)
             print("Adjusting drone to Focus, moving upwards")
             mambo.smart_sleep(.5)
-        elif y_center < -.1:
+        elif y_center < -.2:
             mambo.fly_direct(roll=0, pitch=0, yaw=0, vertical_movement=-20, duration=.2)
             print("Adjusting drone to Focus, moving downwards")
             mambo.smart_sleep(.5)
@@ -564,8 +575,7 @@ if __name__ == "__main__":
             print("Did not need to adjust drone to Focus horizontally")
 
         # DEPTH CENTERING
-        target_area = 14000  # pixel x pixel
-        total_area = img_width * img_height
+        target_area = 20000  # pixel x pixel
 
         # if normal area is above 0, it means drone is too close
         # if normal area is below 0, it means drone is too far
