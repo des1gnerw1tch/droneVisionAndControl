@@ -63,6 +63,8 @@ anchors_path = os.path.join(src_path, "keras_yolo3", "model_data", "yolo_anchors
 # TODO: replace with real person and mask labels
 person_label = 3
 mask_label = 0
+#  TODO: add REAL NOT MASK LABEL
+not_mask_label = None
 
 FLAGS = None
 
@@ -411,6 +413,41 @@ if __name__ == "__main__":
                         return True  # there is a mask inside this person box
                     else:
                         print("is_person_wearing_mask(), Mask not found on person, returning false")
+
+            return False  # if went through whole CSV and no mask inside person, return False
+
+    # returns 0 if cannot tell if person wearing mask, return 1 if person wearing mask,
+    # return 2 if person is wearing mask incorrectly
+    def is_person_wearing_mask_v2(person):
+        row_length = 0  # how many rows CSV file contains
+
+        with open(resultsPath, newline='') as csvfile:  # checks how many rows CSV has
+            reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+            for row in reader:
+                row_length += 1
+
+        with open(resultsPath, newline='') as csvfile:  # loops across CSV to see if person is wearing mask
+            reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+            line_count = 0
+            for row in reader:
+                line_count += 1
+
+                if line_count != 1:  # makes sure first row is skipped
+                    label = float(row[6])
+                else:
+                    label = -1
+
+                if label == mask_label or not_mask_label:  # if row in CSV is mask
+
+                    if is_object_in_person(person, Box(row[2], row[4], row[3], row[5])):
+                        if label == mask_label:
+                            print("is_person_wearing_mask(), Mask found on person, returning 1")
+                            return True  # there is a mask inside this person box
+                        elif label == not_mask_label:
+                            print("is_person_wearing_mask(), Badly Worn Mask found on person, returning 2")
+
+                    else:
+                        print("is_person_wearing_mask(), Mask not found on person, returning 0")
 
             return False  # if went through whole CSV and no mask inside person, return False
 
