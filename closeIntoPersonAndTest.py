@@ -9,7 +9,8 @@ import os   # so we can use command line from python file
 import subprocess   # so we can use command line in different directory than file
 import csv
 
-# README: this script will close into a single person, using object detection of persons body
+# README: this script will close into a single person in a scene, using object detection of persons body.
+# When mask is decided worn or not on a person, drone will look for next person in scene and check for mask.
 
 
 def get_parent_dir(n=1):
@@ -54,8 +55,8 @@ detection_results_file = os.path.join(detection_results_folder, "Detection_Resul
 
 model_folder = os.path.join(data_folder, "Model_Weights")
 
-#  TODO:  replace with Samantha's new weights
-model_weights = os.path.join(model_folder, "weightsPersonMask.h5")
+#  Put weights being used here
+model_weights = os.path.join(model_folder, "weightsPersonMask2.h5")
 model_classes = os.path.join(model_folder, "classes_samantha.txt")
 
 anchors_path = os.path.join(src_path, "keras_yolo3", "model_data", "yolo_anchors.txt")
@@ -387,6 +388,7 @@ if __name__ == "__main__":
             return False
 
     # checks a CSV file, sees if person (Box) specified has a mask inside of it
+    # returns true if person is wearing mask, false if person is not
     def is_person_wearing_mask(person):
         row_length = 0  # how many rows CSV file contains
 
@@ -441,13 +443,14 @@ if __name__ == "__main__":
 
                     if is_object_in_person(person, Box(row[2], row[4], row[3], row[5])):
                         if label == mask_label:
-                            print("is_person_wearing_mask(), Mask found on person, returning 1")
-                            return True  # there is a mask inside this person box
+                            print("is_person_wearing_mask_v2(), Mask found on person, returning 1")
+                            return 1  # there is a mask inside this person box
                         elif label == not_mask_label:
-                            print("is_person_wearing_mask(), Badly Worn Mask found on person, returning 2")
-
+                            print("is_person_wearing_mask_v2(), Badly Worn Mask found on person, returning 2")
+                            return 2
                     else:
-                        print("is_person_wearing_mask(), Mask not found on person, returning 0")
+                        print("is_person_wearing_mask_v2(), Mask not found on person, returning 0")
+                        return 0
 
             return False  # if went through whole CSV and no mask inside person, return False
 
@@ -460,6 +463,7 @@ if __name__ == "__main__":
         cv2.imwrite(testPath + filename, img)
 
     # closes into a person to check if they have a mask on
+    # close_into_person, Box -> Box or None
     def close_into_person(target):
 
         # calculates euclidean distance between two boxes center
@@ -512,17 +516,26 @@ if __name__ == "__main__":
                 # on last iteration, decide whether to move drone closer or drop focus
                 if line_count == row_length and closest_person is not None:
                     print("close_into_person(), Found closest person to Focus, attempting to find mask on them now")
-                    found_mask = is_person_wearing_mask(closest_person)
+                    found_mask = is_person_wearing_mask_v2(closest_person)
 
-                    if found_mask:
-                        print("close_into_person(), Found a mask on Focus, returning None as new Focus")
+                    if found_mask == 1:
+                        print("close_into_person(), Found a mask on Focus, drone rotating"
+                              " 180, returning None as new Focus")
+                        mambo.turn_degrees(180)
+                        mambo.smart_sleep(.5)
                         return None  # person of interest had mask on them
-                    else:
+                    elif found_mask == 0:
                         print("close_into_person(), Did not find mask on Focus, attempting to center drone to Focus")
                         img_width = float(row[8])
                         img_height = float(row[9])
                         print("Person detected without mask, centering drone....")
                         return center_drone(closest_person, area, img_width, img_height)
+                    elif found_mask == 2:
+                        print("close_into_person(), Found a badly worn mask on Focus, returning None as new Focus")
+                        return None  # person of interest had mask on them
+                    else:
+                        print("close_into_person(), ERROR, FOUND_MASK NOT 1 , 2 , OR 3")
+
                 elif line_count == row_length and closest_person is None:
                     print("close_into_person(), could not find Focus, returning None")
                     return None
@@ -556,13 +569,16 @@ if __name__ == "__main__":
                 if label == person_label:  # if object detected is a person
                     subject = Box(row[2], row[4], row[3], row[5])  # person subject
                     print("find_test_person(), found a subject, checking if wearing mask")
-                    found_mask = is_person_wearing_mask(subject)
-                    if found_mask:  # if there was a mask on this subject, keep going through first loop
+                    found_mask = is_person_wearing_mask_v2(subject)
+                    if found_mask == 1:  # if there was a mask on this subject, keep going through first loop
                         print("find_test_person(), Subject was wearing mask, looking for next subject")
                         pass
-                    else:  # if we have not found mask on this subject, return this subject to be focused on
+                    elif found_mask == 0:  # if we have not found mask on this subject, return this subject to be focused on
                         print("find_test_person(), Cannot find mask on Subject, returning Subject as focus")
                         return subject
+                    elif found_mask == 2: # if we have found  incorreclty worn mask on this subject, keep going through loop
+                        print("find_test_person(), Subject was wearing mask incorrectly, looking for next subject")
+                        pass
 
             print("find_test_person(), Did not find any subjects not wearing a mask, returning None as focus")
             return None  # first loop finished, person without mask not found
@@ -580,11 +596,11 @@ if __name__ == "__main__":
         print("y_center: " + str(y_center))
 
         # vertical centering
-        if y_center > -.1:
+        if y_center > 0:
             mambo.fly_direct(roll=0, pitch=0, yaw=0, vertical_movement=10, duration=.2)
             print("Adjusting drone to Focus, moving upwards")
             mambo.smart_sleep(.5)
-        elif y_center < -.2:
+        elif y_center < -.1:
             mambo.fly_direct(roll=0, pitch=0, yaw=0, vertical_movement=-20, duration=.2)
             print("Adjusting drone to Focus, moving downwards")
             mambo.smart_sleep(.5)
@@ -619,7 +635,7 @@ if __name__ == "__main__":
         normal_area = area - target_area  # value between -0.5 and 0.5
 
         print("normal area" + str(normal_area))
-        BUFFER = 5000  # area within drone is safe
+        BUFFER = 4000  # area within drone is safe
 
         if normal_area > BUFFER:
             mambo.fly_direct(roll=0, pitch=-50, yaw=0, vertical_movement=0, duration=.3)
