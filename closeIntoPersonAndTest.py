@@ -8,6 +8,7 @@ import time
 import os   # so we can use command line from python file
 import subprocess   # so we can use command line in different directory than file
 import csv
+import SocialDistanceDetector
 
 # README: this script will close into a single person in a scene, using object detection of persons body.
 # When mask is decided worn or not on a person, drone will look for next person in scene and check for mask.
@@ -55,19 +56,23 @@ detection_results_file = os.path.join(detection_results_folder, "Detection_Resul
 
 model_folder = os.path.join(data_folder, "Model_Weights")
 
+social_distance_results_folder = os.getcwd() + "/Distancing_Results/"
+
 #  Put weights being used here
 model_weights = os.path.join(model_folder, "weightsPersonMask2.h5")
 model_classes = os.path.join(model_folder, "classes_samantha.txt")
 
 anchors_path = os.path.join(src_path, "keras_yolo3", "model_data", "yolo_anchors.txt")
 
-# TODO: replace with real person and mask labels
+# Labels from Weights
 person_label = 3
 mask_label = 0
-#  TODO: add REAL NOT MASK LABEL
 not_mask_label = None
 
 FLAGS = None
+
+# Other variables
+img_save_name = "lastImage.png"
 
 
 # runs weights on images in image_folder, detection results saved to a csv in detction_results_folder
@@ -459,7 +464,7 @@ if __name__ == "__main__":
         _mamboVision = DroneVision(mambo, is_bebop=False, buffer_size=30)
         _userVision = UserVision(mamboVision)
         img = _userVision.get_latest_picture()
-        filename = "lastImage.png"
+        filename = img_save_name
         cv2.imwrite(testPath + filename, img)
 
     # closes into a person to check if they have a mask on
@@ -698,6 +703,8 @@ if __name__ == "__main__":
                     print("Did not find a focus, running find_test_person()")
                     last_image_to_test_dir()
                     run_weights(out_df)
+                    SocialDistanceDetector.check(testPath + img_save_name, detection_results_file,
+                                                 social_distance_results_folder, str(person_label))
                     focus = find_test_person()
                     if focus is None:  # no interesting person is found, rotate and try again
                         print("Did not find test person, rotating...");
